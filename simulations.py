@@ -89,7 +89,7 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     fringes_approx = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes_approx
 
-# Double-Slit S1 (Poincaré) - 2 runs, with σ=np.pi/3 for V~0.718 reduction
+# Double-Slit S1 (Poincaré) - 2 runs, with σ=np.pi/2 for V~0.312 reduction (strong decoherence)
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
     alphas_deg = np.linspace(alpha_range_deg[0], alpha_range_deg[1], num_points)
     alphas = np.deg2rad(alphas_deg)
@@ -98,10 +98,10 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     if distribution == 'uniform':
         lambd = np.random.uniform(0, 2*np.pi, N)
         lambd2 = lambd.copy()
-    else:  # Moderate bias: Beta(2,5) + noise σ=np.pi/3 for V~0.718
+    else:  # Moderate bias: Beta(2,5) + noise σ=np.pi/2 for V~0.312
         z = np.random.beta(2,5,N)
         lambd = 2 * np.pi * z
-        lambd2 = (lambd + np.random.normal(0, np.pi/3, N)) % (2 * np.pi)
+        lambd2 = (lambd + np.random.normal(0, np.pi/2, N)) % (2 * np.pi)
     
     for i, alpha in enumerate(alphas):
         delta_phi = 2 * gamma * np.sin(alpha) + k * (np.cos(alpha - lambd) - np.cos(alpha + delta - lambd2))
@@ -113,7 +113,7 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     fringes_approx = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes_approx
 
-# GHZ - Version première (post_selection=False, M~3.94 tuned)
+# GHZ - Version première (post_selection=False, sigma=0.01 for tuned to get M~3.94)
 def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_selection=False):
     np.random.seed(42)
     if model == 'S2':
@@ -279,12 +279,12 @@ for dist in ['uniform', 'moderate_bias']:
     Imax, Imin, V, fringes = simulate_double_slit_s1(dist)
     print(f"{dist}: Imax={Imax:.3f}, Imin={Imin:.3f}, V={V:.3f}, Fringes={fringes}")
 
-print("\nGHZ RESULTS (post_selection=False, version première):")
+print("\nGHZ RESULTS (post_selection=False, version première, sigma=0.01 for tuned):")
 M_basic, p_basic, terms_basic = simulate_ghz('S2', 1.0, 1.0, 0.0)
 print(f"Basic S2: M={M_basic:.3f}, P(±)={p_basic:.3f}, Terms={terms_basic:.3f}")
 
-M_tuned_s2, p_tuned_s2, terms_tuned_s2 = simulate_ghz('S2', 0.5, 0.5, 0.1)
+M_tuned_s2, p_tuned_s2, terms_tuned_s2 = simulate_ghz('S2', 0.5, 0.5, 0.01)
 print(f"Tuned S2: M={M_tuned_s2:.3f}, P(±)={p_tuned_s2:.3f}, Terms={terms_tuned_s2:.3f}")
 
-M_s1, p_s1, terms_s1 = simulate_ghz('S1', 1.0, 1.0, 0.1)
+M_s1, p_s1, terms_s1 = simulate_ghz('S1', 1.0, 1.0, 0.01)
 print(f"Tuned S1: M={M_s1:.3f}, P(±)={p_s1:.3f}, Terms={terms_s1:.3f}")
