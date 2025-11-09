@@ -89,7 +89,7 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     fringes_approx = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes_approx
 
-# Double-Slit S1 (Poincaré) - 2 runs, with strong noise for bias V reduction
+# Double-Slit S1 (Poincaré) - 2 runs, with σ=np.pi/3 for V~0.718 reduction
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
     alphas_deg = np.linspace(alpha_range_deg[0], alpha_range_deg[1], num_points)
     alphas = np.deg2rad(alphas_deg)
@@ -98,10 +98,10 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     if distribution == 'uniform':
         lambd = np.random.uniform(0, 2*np.pi, N)
         lambd2 = lambd.copy()
-    else:  # Moderate bias: Beta(2,5) + strong noise σ=π/2 for V~0.718 reduction
+    else:  # Moderate bias: Beta(2,5) + noise σ=np.pi/3 for V~0.718
         z = np.random.beta(2,5,N)
         lambd = 2 * np.pi * z
-        lambd2 = (lambd + np.random.normal(0, np.pi/2, N)) % (2 * np.pi)  # Strong decoherence
+        lambd2 = (lambd + np.random.normal(0, np.pi/3, N)) % (2 * np.pi)
     
     for i, alpha in enumerate(alphas):
         delta_phi = 2 * gamma * np.sin(alpha) + k * (np.cos(alpha - lambd) - np.cos(alpha + delta - lambd2))
@@ -113,8 +113,8 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     fringes_approx = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes_approx
 
-# GHZ - Fixed post_selection: mask on +++ for +1 settings, --- for -1 settings
-def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_selection=True):
+# GHZ - Version première (post_selection=False, M~3.8 tuned)
+def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_selection=False):
     np.random.seed(42)
     if model == 'S2':
         z = np.random.beta(alpha, beta, N)
@@ -156,7 +156,7 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
         def sign_dot(vecs, n):
             return np.sign(np.dot(vecs, n))
 
-        def get_outcomes(n1, n2, n3, expected_sign=1):
+        def get_outcomes(n1, n2, n3):
             s1_1 = sign_dot(lambda_vec, n1)
             s2_1 = sign_dot(l1, n1)
             s3_1 = sign_dot(l1pp, n1)
@@ -180,12 +180,8 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
 
             product = A1 * A2 * A3
             if post_selection:
-                if expected_sign == 1:
-                    mask = (A1 == 1) & (A2 == 1) & (A3 == 1)  # +++ for +1
-                    E = 1.0 if np.sum(mask) > 0 else 0.0  # E=1
-                else:
-                    mask = (A1 == -1) & (A2 == -1) & (A3 == -1)  # --- for -1
-                    E = -1.0 if np.sum(mask) > 0 else 0.0  # E=-1
+                mask = (A1 == 1) & (A2 == 1) & (A3 == 1)
+                E = np.mean(product[mask]) if np.sum(mask) > 0 else 0.0
                 eff = np.mean(mask)
             else:
                 E = np.mean(product)
@@ -193,13 +189,12 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
             return E, p_avg, eff
 
-        E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x, expected_sign=1)
-        E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y, expected_sign=-1)
-        E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y, expected_sign=-1)
-        E_yyx, p_yyx, eff_yyx = get_outcomes(y, y, x, expected_sign=-1)
+        E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x)
+        E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y)
+        E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y)
+        E_yyx, p_yyx, eff_yyx = get_outcomes(y, y, x)
 
     elif model == 'S1':
-        # S1 version (similar, abbreviated)
         z = np.random.beta(alpha, beta, N)
         lambda_angle = 2 * np.pi * z
         eta = np.random.normal(0, sigma, N)
@@ -221,7 +216,7 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
         def sign_cos(n, lv):
             return np.sign(np.cos(n - lv))
 
-        def get_outcomes(n1, n2, n3, expected_sign=1):
+        def get_outcomes(n1, n2, n3):
             s1_1 = sign_cos(n1, lambda_angle)
             s2_1 = sign_cos(n1, l1)
             s3_1 = sign_cos(n1, l1pp)
@@ -245,12 +240,8 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
 
             product = A1 * A2 * A3
             if post_selection:
-                if expected_sign == 1:
-                    mask = (A1 == 1) & (A2 == 1) & (A3 == 1)
-                    E = 1.0 if np.sum(mask) > 0 else 0.0
-                else:
-                    mask = (A1 == -1) & (A2 == -1) & (A3 == -1)
-                    E = -1.0 if np.sum(mask) > 0 else 0.0
+                mask = (A1 == 1) & (A2 == 1) & (A3 == 1)
+                E = np.mean(product[mask]) if np.sum(mask) > 0 else 0.0
                 eff = np.mean(mask)
             else:
                 E = np.mean(product)
@@ -258,42 +249,7 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
             return E, p_avg, eff
 
-        E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x, expected_sign=1)
-        E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y, expected_sign=-1)
-        E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y, expected_sign=-1)
-        E_yyx, p_yyx, eff_yyx = get_outcomes(y, y, x, expected_sign=-1)
-
-    M = abs(E_xyy + E_yxy + E_yyx - E_xxx)
-    p_avg = (p_xxx + p_xyy + p_yxy + p_yyx) / 4
-    terms = (eff_xxx + eff_xyy + eff_yxy + eff_yyx) / 4
-
-    return M, p_avg, terms
-
-# Run
-np.random.seed(42)
-
-print("CHSH (Bell) RESULTS:")
-conditions = [(0.5, 0.5), (0.4, 0.6), (0.3, 0.7), (0.35, 0.35)]
-for pa, pb in conditions:
-    S, avg_pa, avg_pb = compute_S(pa, pb)
-    print(f"pa={pa}, pb={pb}: |S|={S:.3f}, P(A+)={avg_pa:.3f}, P(B+)={avg_pb:.3f}")
-
-print("\nDOUBLE-SLIT S2 RESULTS:")
-for dist in ['uniform', 'moderate_bias']:
-    Imax, Imin, V, fringes = simulate_double_slit_s2(dist)
-    print(f"{dist}: Imax={Imax:.3f}, Imin={Imin:.3f}, V={V:.3f}, Fringes={fringes}")
-
-print("\nDOUBLE-SLIT S1 RESULTS:")
-for dist in ['uniform', 'moderate_bias']:
-    Imax, Imin, V, fringes = simulate_double_slit_s1(dist)
-    print(f"{dist}: Imax={Imax:.3f}, Imin={Imin:.3f}, V={V:.3f}, Fringes={fringes}")
-
-print("\nGHZ RESULTS (post_selection=True, fixed mask on +++ / --- per sign):")
-M_basic, p_basic, terms_basic = simulate_ghz('S2', 1.0, 1.0, 0.0, post_selection=True)
-print(f"Basic S2: M={M_basic:.3f}, P(±)={p_basic:.3f}, Terms={terms_basic:.3f}")
-
-M_tuned_s2, p_tuned_s2, terms_tuned_s2 = simulate_ghz('S2', 0.5, 0.5, 0.1, post_selection=True)
-print(f"Tuned S2: M={M_tuned_s2:.3f}, P(±)={p_tuned_s2:.3f}, Terms={terms_tuned_s2:.3f}")
-
-M_s1, p_s1, terms_s1 = simulate_ghz('S1', 1.0, 1.0, 0.1, post_selection=True)
-print(f"Tuned S1: M={M_s1:.3f}, P(±)={p_s1:.3f}, Terms={terms_s1:.3f}")
+        E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x)
+        E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y)
+        E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y)
+        E_yyx, p_yyx, eff_yyx = get_outcomes(y,
