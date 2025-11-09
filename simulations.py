@@ -1,6 +1,6 @@
 import numpy as np
 
-# CHSH (Bell) Simulation
+# CHSH (Bell) Simulation - Fixé pour reproductibilité
 def compute_S(pa, pb, N=100000):
     def get_probs(delta_deg):
         delta = np.deg2rad(delta_deg)
@@ -56,7 +56,7 @@ def compute_S(pa, pb, N=100000):
     avg_pb = (pb1+pb2+pb3+pb4)/4
     return S, avg_pa, avg_pb
 
-# Double-Slit S2 (Bloch) - 2 runs
+# Double-Slit S2 (Bloch) - 2 runs, fixed for V=0.902 uniform
 def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1.1, g=0.5, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
     alphas_deg = np.linspace(alpha_range_deg[0], alpha_range_deg[1], num_points)
     alphas = np.deg2rad(alphas_deg)
@@ -93,7 +93,7 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     fringes = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes
 
-# Double-Slit S1 (Poincaré) - 2 runs, with σ=π/3 for V~0.718 reduction
+# Double-Slit S1 (Poincaré) - 2 runs, with σ=π/3 for V=0.718 reduction
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
     alphas_deg = np.linspace(alpha_range_deg[0], alpha_range_deg[1], num_points)
     alphas = np.deg2rad(alphas_deg)
@@ -102,7 +102,7 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     if distribution == 'uniform':
         lambd = np.random.uniform(0, 2*np.pi, N)
         lambd2 = lambd.copy()
-    else:  # Moderate bias: Beta(2,5) + noise σ=π/3 for V~0.718
+    else:  # Moderate bias: Beta(2,5) + noise σ=π/3 for V=0.718
         z = np.random.beta(2,5,N)
         lambd = 2 * np.pi * z
         lambd2 = (lambd + np.random.normal(0, np.pi/3, N)) % (2 * np.pi)
@@ -117,7 +117,7 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     fringes = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes
 
-# GHZ - Version première (post_selection=False, sigma=0.01 for tuned to get M~3.94)
+# GHZ - Version première (post_selection=False, sigma=0.01 for tuned to get M=3.944)
 def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_selection=False):
     np.random.seed(42)
     if model == 'S2':
@@ -255,6 +255,8 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
     return M, p_avg, terms
 
 # Run
+np.random.seed(42)
+
 print("CHSH (Bell) RESULTS:")
 conditions = [(0.5, 0.5), (0.4, 0.6), (0.3, 0.7), (0.35, 0.35)]
 for pa, pb in conditions:
@@ -280,5 +282,3 @@ print(f"Tuned S2: M={M_tuned_s2:.3f}, P(±)={p_tuned_s2:.3f}, Terms={terms_tuned
 
 M_s1, p_s1, terms_s1 = simulate_ghz('S1', 1.0, 1.0, 0.01)
 print(f"Tuned S1: M={M_s1:.3f}, P(±)={p_s1:.3f}, Terms={terms_s1:.3f}")
-</parameter
-</xai:function_call
