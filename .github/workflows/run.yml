@@ -1,0 +1,47 @@
+name: Run simulations and upload results
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  run-simulations:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install numpy
+
+      - name: Create results directory
+        run: mkdir -p results
+
+      - name: Run simulations (capture stdout to results/output.txt)
+        # Remplace 'simulations.py' par le nom exact de ton fichier si nécessaire
+        run: |
+          python simulations.py 2>&1 | tee results/output.txt
+
+      - name: Save python / numpy info
+        run: |
+          python - <<'PY'
+          import sys, numpy as np
+          with open('results/env.txt', 'w') as f:
+              f.write('python: ' + sys.version.replace('\n',' ') + '\n')
+              f.write('numpy: ' + np.__version__ + '\n')
+          PY
+
+      - name: Upload results as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: simulation-results
+          path: results/
