@@ -10,9 +10,9 @@ def compute_S(pa, pb, N=100000):
 
     def flip_outcome(out, f_up, f_down):
         if out == 1 and np.random.random() < f_down:
-            out = -1
+            return -1
         elif out == -1 and np.random.random() < f_up:
-            out = 1
+            return 1
         return out
 
     def compute_E(delta, N, pa, pb):
@@ -28,12 +28,14 @@ def compute_S(pa, pb, N=100000):
             elif outcome == 'pm': A, B = 1, -1
             else: A, B = -1, 1
 
-            f_a_up = f_a_down = 0
+            f_a_up = 0.0
+            f_a_down = 0.0
             if pa < 0.5: f_a_down = 1 - 2*pa
             elif pa > 0.5: f_a_up = 2*pa - 1
             A = flip_outcome(A, f_a_up, f_a_down)
 
-            f_b_up = f_b_down = 0
+            f_b_up = 0.0
+            f_b_down = 0.0
             if pb < 0.5: f_b_down = 1 - 2*pb
             elif pb > 0.5: f_b_up = 2*pb - 1
             B = flip_outcome(B, f_b_up, f_b_down)
@@ -50,7 +52,9 @@ def compute_S(pa, pb, N=100000):
     E3, pa3, pb3 = compute_E(deltas['apb'],N,pa,pb)
     E4, pa4, pb4 = compute_E(deltas['apbp'],N,pa,pb)
     S = abs(E1 + E3 + E4 - E2)
-    return S, (pa1+pa2+pa3+pa4)/4, (pb1+pb2+pb3+pb4)/4
+    avg_pa = (pa1+pa2+pa3+pa4)/4
+    avg_pb = (pb1+pb2+pb3+pb4)/4
+    return S, avg_pa, avg_pb
 
 # Double-Slit S2 (Bloch) - 2 runs
 def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1.1, g=0.5, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
@@ -86,8 +90,8 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     Imax = np.max(I)
     Imin = np.min(I)
     V = (Imax - Imin) / (Imax + Imin)
-    fringes_approx = np.round(gamma / np.pi)
-    return Imax, Imin, V, fringes_approx
+    fringes = np.round(gamma / np.pi)
+    return Imax, Imin, V, fringes
 
 # Double-Slit S1 (Poincaré) - 2 runs, with σ=π/3 for V~0.718 reduction
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
@@ -110,10 +114,10 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     Imax = np.max(I)
     Imin = np.min(I)
     V = (Imax - Imin) / (Imax + Imin)
-    fringes_approx = np.round(gamma / np.pi)
-    return Imax, Imin, V, fringes_approx
+    fringes = np.round(gamma / np.pi)
+    return Imax, Imin, V, fringes
 
-# GHZ - Version première (post_selection=False, sigma=0.1 for tuned to get M~3.94)
+# GHZ - Version première (post_selection=False, sigma=0.01 for tuned to get M~3.94)
 def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_selection=False):
     np.random.seed(42)
     if model == 'S2':
@@ -179,13 +183,8 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
             A3 = np.where(np.random.random(N) < p3, 1, -1)
 
             product = A1 * A2 * A3
-            if post_selection:
-                mask = (A1 == 1) & (A2 == 1) & (A3 == 1)
-                E = np.mean(product[mask]) if np.sum(mask) > 0 else 0.0
-                eff = np.mean(mask)
-            else:
-                E = np.mean(product)
-                eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
+            E = np.mean(product)
+            eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
             return E, p_avg, eff
 
@@ -239,13 +238,8 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
             A3 = np.where(np.random.random(N) < p3, 1, -1)
 
             product = A1 * A2 * A3
-            if post_selection:
-                mask = (A1 == 1) & (A2 == 1) & (A3 == 1)
-                E = np.mean(product[mask]) if np.sum(mask) > 0 else 0.0
-                eff = np.mean(mask)
-            else:
-                E = np.mean(product)
-                eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
+            E = np.mean(product)
+            eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
             return E, p_avg, eff
 
@@ -261,8 +255,6 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
     return M, p_avg, terms
 
 # Run
-np.random.seed(42)
-
 print("CHSH (Bell) RESULTS:")
 conditions = [(0.5, 0.5), (0.4, 0.6), (0.3, 0.7), (0.35, 0.35)]
 for pa, pb in conditions:
@@ -279,12 +271,14 @@ for dist in ['uniform', 'moderate_bias']:
     Imax, Imin, V, fringes = simulate_double_slit_s1(dist)
     print(f"{dist}: Imax={Imax:.3f}, Imin={Imin:.3f}, V={V:.3f}, Fringes={fringes}")
 
-print("\nGHZ RESULTS (post_selection=False, sigma=0.1 for tuned):")
+print("\nGHZ RESULTS (post_selection=False, sigma=0.01 for tuned):")
 M_basic, p_basic, terms_basic = simulate_ghz('S2', 1.0, 1.0, 0.0)
 print(f"Basic S2: M={M_basic:.3f}, P(±)={p_basic:.3f}, Terms={terms_basic:.3f}")
 
-M_tuned_s2, p_tuned_s2, terms_tuned_s2 = simulate_ghz('S2', 0.5, 0.5, 0.1)
+M_tuned_s2, p_tuned_s2, terms_tuned_s2 = simulate_ghz('S2', 0.5, 0.5, 0.01)
 print(f"Tuned S2: M={M_tuned_s2:.3f}, P(±)={p_tuned_s2:.3f}, Terms={terms_tuned_s2:.3f}")
 
-M_s1, p_s1, terms_s1 = simulate_ghz('S1', 1.0, 1.0, 0.1)
+M_s1, p_s1, terms_s1 = simulate_ghz('S1', 1.0, 1.0, 0.01)
 print(f"Tuned S1: M={M_s1:.3f}, P(±)={p_s1:.3f}, Terms={terms_s1:.3f}")
+</parameter
+</xai:function_call
