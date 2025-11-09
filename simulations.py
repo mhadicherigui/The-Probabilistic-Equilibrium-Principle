@@ -1,10 +1,10 @@
 import numpy as np
 
-# === SEED GLOBAL POUR REPRODUCTIBILITÉ ===
+# Seed global pour reproductibilité exacte
 np.random.seed(42)
 
 # ========================================
-# CHSH (Bell) Simulation
+# CHSH (Bell) Simulation - Fixé pour reproductibilité
 # ========================================
 def compute_S(pa, pb, N=100000):
     def get_probs(delta_deg):
@@ -24,7 +24,8 @@ def compute_S(pa, pb, N=100000):
         probs = get_probs(delta)
         choice_list = ['pp','mm','pm','mp']
         sum_ab = 0.0
-        count_ap = count_bp = 0
+        count_ap = 0
+        count_bp = 0
         for _ in range(N):
             outcome = np.random.choice(choice_list, p=probs)
             if outcome == 'pp': A, B = 1, 1
@@ -32,13 +33,16 @@ def compute_S(pa, pb, N=100000):
             elif outcome == 'pm': A, B = 1, -1
             else: A, B = -1, 1
 
-            f_a_up = f_a_down = f_b_up = f_b_down = 0.0
+            f_a_up = 0.0
+            f_a_down = 0.0
             if pa < 0.5: f_a_down = 1 - 2*pa
             elif pa > 0.5: f_a_up = 2*pa - 1
+            A = flip_outcome(A, f_a_up, f_a_down)
+
+            f_b_up = 0.0
+            f_b_down = 0.0
             if pb < 0.5: f_b_down = 1 - 2*pb
             elif pb > 0.5: f_b_up = 2*pb - 1
-
-            A = flip_outcome(A, f_a_up, f_a_down)
             B = flip_outcome(B, f_b_up, f_b_down)
 
             sum_ab += A * B
@@ -53,11 +57,12 @@ def compute_S(pa, pb, N=100000):
     E3, pa3, pb3 = compute_E(deltas['apb'], N, pa, pb)
     E4, pa4, pb4 = compute_E(deltas['apbp'], N, pa, pb)
     S = abs(E1 + E3 + E4 - E2)
-    return S, (pa1+pa2+pa3+pa4)/4, (pb1+pb2+pb3+pb4)/4
-
+    avg_pa = (pa1 + pa2 + pa3 + pa4) / 4
+    avg_pb = (pb1 + pb2 + pb3 + pb4) / 4
+    return S, avg_pa, avg_pb
 
 # ========================================
-# Double-Slit S2 (Bloch)
+# Double-Slit S2 (Bloch) - V=0.902 uniform
 # ========================================
 def simulate_double_slit_s2(distribution='uniform', N=100000):
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
@@ -65,10 +70,12 @@ def simulate_double_slit_s2(distribution='uniform', N=100000):
     gamma, k, g, delta = 3*np.pi, 1.1, 0.5, np.pi/2
 
     if distribution == 'uniform':
-        theta = np.arccos(1 - 2*np.random.uniform(0,1,N))
-        phi = 2*np.pi*np.random.uniform(0,1,N)
-        lambd_x = np.sin(theta)*np.cos(phi)
-        lambd_y = np.sin(theta)*np.sin(phi)
+        u = np.random.uniform(0,1,N)
+        v = np.random.uniform(0,1,N)
+        theta = np.arccos(1 - 2*u)
+        phi = 2*np.pi*v
+        lambd_x = np.sin(theta) * np.cos(phi)
+        lambd_y = np.sin(theta) * np.sin(phi)
         lambd_z = np.cos(theta)
     else:  # moderate_bias
         z = np.random.beta(2,5,N)
@@ -92,9 +99,8 @@ def simulate_double_slit_s2(distribution='uniform', N=100000):
     fringes = round(gamma / np.pi)
     return Imax, Imin, V, fringes
 
-
 # ========================================
-# Double-Slit S1 (Poincaré) - V ≈ 0.718 avec bruit π/3
+# Double-Slit S1 (Poincaré) - V=0.718 bias with σ=π/3
 # ========================================
 def simulate_double_slit_s1(distribution='uniform', N=100000):
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
@@ -118,9 +124,8 @@ def simulate_double_slit_s1(distribution='uniform', N=100000):
     fringes = round(gamma / np.pi)
     return Imax, Imin, V, fringes
 
-
 # ========================================
-# GHZ - Version première (post_selection=False)
+# GHZ - Version première (post_selection=False, sigma=0.01 tuned, Basic S1 ajouté)
 # ========================================
 def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_selection=False):
     if model == 'S2':
@@ -142,7 +147,7 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_sel
             return v / norm
 
         l1 = make_unit(lambda_vec + eta + delta1)
-過去        l2 = make_unit(lambda_vec + eta + delta2)
+        l2 = make_unit(lambda_vec + eta + delta2)
         l3 = make_unit(lambda_vec + eta + delta3)
 
         def sample_s2():
@@ -164,17 +169,23 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_sel
             return np.sign(np.dot(vecs, n))
 
         def get_outcomes(n1, n2, n3):
-            s1_1 = sign_dot(lambda_vec, n1); s2_1 = sign_dot(l1, n1); s3_1 = sign_dot(l1pp, n1)
+            s1_1 = sign_dot(lambda_vec, n1)
+            s2_1 = sign_dot(l1, n1)
+            s3_1 = sign_dot(l1pp, n1)
             R1 = s1_1 * s2_1 + s3_1
             p1 = np.clip(R1/4.0 + 0.5, 0, 1)
             A1 = (np.random.random(N) < p1).astype(int) * 2 - 1
 
-            s1_2 = sign_dot(lambda_vec, n2); s2_2 = sign_dot(l2, n2); s3_2 = sign_dot(l2pp, n2)
+            s1_2 = sign_dot(lambda_vec, n2)
+            s2_2 = sign_dot(l2, n2)
+            s3_2 = sign_dot(l2pp, n2)
             R2 = s1_2 * s2_2 + s3_2
             p2 = np.clip(R2/4.0 + 0.5, 0, 1)
             A2 = (np.random.random(N) < p2).astype(int) * 2 - 1
 
-            s1_3 = sign_dot(lambda_vec, n3); s2_3 = sign_dot(l3, n3); s3_3 = sign_dot(l3pp, n3)
+            s1_3 = sign_dot(lambda_vec, n3)
+            s2_3 = sign_dot(l3, n3)
+            s3_3 = sign_dot(l3pp, n3)
             R3 = s1_3 * s2_3 + s3_3
             p3 = np.clip(R3/4.0 + 0.5, 0, 1)
             A3 = (np.random.random(N) < p3).astype(int) * 2 - 1
@@ -182,7 +193,7 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_sel
             product = A1 * A2 * A3
             E = np.mean(product)
             eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
-            p_avg = (np.mean(p1) +Vat np.mean(p2) + np.mean(p3)) / 3
+            p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3
             return E, p_avg, eff
 
         E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x)
@@ -212,17 +223,23 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_sel
             return np.sign(np.cos(n - lv))
 
         def get_outcomes(n1, n2, n3):
-            s1_1 = sign_cos(n1, lambda_angle); s2_1 = sign_cos(n1, l1); s3_1 = sign_cos(n1, l1pp)
+            s1_1 = sign_cos(n1, lambda_angle)
+            s2_1 = sign_cos(n1, l1)
+            s3_1 = sign_cos(n1, l1pp)
             R1 = s1_1 * s2_1 + s3_1
             p1 = np.clip(R1/4.0 + 0.5, 0, 1)
             A1 = (np.random.random(N) < p1).astype(int) * 2 - 1
 
-            s1_2 = sign_cos(n2, lambda_angle); s2_2 = sign_cos(n2, l2); s3_2 = sign_cos(n2, l2pp)
+            s1_2 = sign_cos(n2, lambda_angle)
+            s2_2 = sign_cos(n2, l2)
+            s3_2 = sign_cos(n2, l2pp)
             R2 = s1_2 * s2_2 + s3_2
             p2 = np.clip(R2/4.0 + 0.5, 0, 1)
             A2 = (np.random.random(N) < p2).astype(int) * 2 - 1
 
-            s1_3 = sign_cos(n3, lambda_angle); s2_3 = sign_cos(n3, l3); s3_3 = sign_cos(n3, l3pp)
+            s1_3 = sign_cos(n3, lambda_angle)
+            s2_3 = sign_cos(n3, l3)
+            s3_3 = sign_cos(n3, l3pp)
             R3 = s1_3 * s2_3 + s3_3
             p3 = np.clip(R3/4.0 + 0.5, 0, 1)
             A3 = (np.random.random(N) < p3).astype(int) * 2 - 1
@@ -243,10 +260,7 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_sel
     terms = (eff_xxx + eff_xyy + eff_yxy + eff_yyx) / 4
     return M, p_avg, terms
 
-
-# ========================================
-# RUN ALL
-# ========================================
+# Run
 print("CHSH (Bell) RESULTS:")
 for pa, pb in [(0.5,0.5), (0.4,0.6), (0.3,0.7), (0.35,0.35)]:
     S, pa_avg, pb_avg = compute_S(pa, pb)
@@ -263,7 +277,11 @@ for dist in ['uniform', 'moderate_bias']:
     print(f"{dist}: Imax={Imax:.3f}, Imin={Imin:.3f}, V={V:.3f}, Fringes={F}")
 
 print("\nGHZ RESULTS (post_selection=False, sigma=0.01):")
-M, p, t = simulate_ghz('S2', 1.0, 1.0, 0.0); print(f"Basic S2: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
-M, p, t = simulate_ghz('S2', 0.5, 0.5, 0.01); print(f"Tuned S2: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
-M, p, t = simulate_ghz('S1', 1.0, 1.0, 0.0); print(f"Basic S1: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
-M, p, t = simulate_ghz('S1', 0.5, 0.5, 0.01); print(f"Tuned S1: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
+M, p, t = simulate_ghz('S2', 1.0, 1.0, 0.0)
+print(f"Basic S2: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
+M, p, t = simulate_ghz('S2', 0.5, 0.5, 0.01)
+print(f"Tuned S2: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
+M, p, t = simulate_ghz('S1', 1.0, 1.0, 0.0)
+print(f"Basic S1: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
+M, p, t = simulate_ghz('S1', 0.5, 0.5, 0.01)
+print(f"Tuned S1: M={M:.3f}, P(±)={p:.3f}, Terms={t:.3f}")
