@@ -4,7 +4,7 @@ import numpy as np
 np.random.seed(42)
 
 # ========================================
-# CHSH (Bell) Simulation - Fixé pour reproductibilité
+# CHSH (Bell) Simulation
 # ========================================
 def compute_S(pa, pb, N=100000):
     def get_probs(delta_deg):
@@ -125,7 +125,7 @@ def simulate_double_slit_s1(distribution='uniform', N=100000):
     return Imax, Imin, V, fringes
 
 # ========================================
-# GHZ - Version première (post_selection=False, sigma=0.01 tuned, Basic S1 ajouté)
+# GHZ - Version première (post_selection=False, sigma=0.01 tuned, Basic S1)
 # ========================================
 def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_selection=False):
     if model == 'S2':
@@ -260,7 +260,9 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.01, N=100000, post_sel
     terms = (eff_xxx + eff_xyy + eff_yxy + eff_yyx) / 4
     return M, p_avg, terms
 
-# Run
+# ========================================
+# Run All
+# ========================================
 print("CHSH (Bell) RESULTS:")
 for pa, pb in [(0.5,0.5), (0.4,0.6), (0.3,0.7), (0.35,0.35)]:
     S, pa_avg, pb_avg = compute_S(pa, pb)
