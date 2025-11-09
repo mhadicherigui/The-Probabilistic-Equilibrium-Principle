@@ -1,12 +1,17 @@
-# improved_simulations.py
+# ghz_comparison.py
+# Script complet : CHSH, double-slit S2/S1, GHZ (sans post-selection enhanced),
+# GHZ avec post-selection minimale (auto-calculée), et tentative de reproduction sans post-selection.
+#
+# Usage : python ghz_comparison.py
+#
 import numpy as np
 
-# Seed global pour reproductibilité
+# Seed global pour reproductibilité exacte
 np.random.seed(42)
 
-# -----------------------------
-# CHSH (Bell) - unchanged
-# -----------------------------
+# ========================================
+# CHSH (Bell) Simulation - identique
+# ========================================
 def compute_S(pa, pb, N=100000):
     def get_probs(delta_deg):
         delta = np.deg2rad(delta_deg)
@@ -62,12 +67,13 @@ def compute_S(pa, pb, N=100000):
     avg_pb = (pb1 + pb2 + pb3 + pb4) / 4
     return S, avg_pa, avg_pb
 
-# -----------------------------
-# Double-slit S2 (Bloch)
-# -----------------------------
+# ========================================
+# Double-Slit S2 (Bloch) - fonctionnelle
+# ========================================
 def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1.1, g=0.5):
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
     I = np.zeros(100)
+    delta = np.pi/2
 
     if distribution == 'uniform':
         u = np.random.uniform(0,1,N)
@@ -86,7 +92,6 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
         lambd_y = np.sin(theta)*np.sin(phi)
         lambd_z = cos_theta
 
-    delta = np.pi/2
     for i, alpha in enumerate(alphas):
         p1 = np.array([np.cos(alpha), np.sin(alpha), 0])
         p2 = np.array([np.cos(alpha+delta), np.sin(alpha+delta), 0])
@@ -100,12 +105,13 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     fringes = round(gamma / np.pi)
     return Imax, Imin, V, fringes
 
-# -----------------------------
-# Double-slit S1 (Poincaré)
-# -----------------------------
+# ========================================
+# Double-Slit S1 (Poincaré)
+# ========================================
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, noise_sigma=np.pi/3):
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
     I = np.zeros(100)
+    delta = np.pi/2
 
     if distribution == 'uniform':
         lambd = np.random.uniform(0, 2*np.pi, N)
@@ -115,7 +121,6 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
         lambd = 2*np.pi*z
         lambd2 = (lambd + np.random.normal(0, noise_sigma, N)) % (2*np.pi)
 
-    delta = np.pi/2
     for i, alpha in enumerate(alphas):
         delta_phi = 2*gamma*np.sin(alpha) + k*(np.cos(alpha - lambd) - np.cos(alpha + delta - lambd2))
         I[i] = 1 + np.mean(np.cos(delta_phi))
@@ -125,19 +130,17 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     fringes = round(gamma / np.pi)
     return Imax, Imin, V, fringes
 
-# -----------------------------
-# Enhanced GHZ (NO post-selection)
-# - Introduce: sigma_common (eta) and sigma_delta (per-particle noise).
-# - When sigma_common >> sigma_delta, lambda_i are strongly correlated.
-# -----------------------------
+# ========================================
+# GHZ enhanced (NO post-selection) - version améliorée
+# ========================================
 def simulate_ghz_enhanced(model='S2', alpha=0.5, beta=0.5,
-                          sigma_common=0.05, sigma_delta=0.005, N=100000):
+                          sigma_common=0.02, sigma_delta=0.005, N=100000):
     """
-    sigma_common : écart-type de la composante commune (eta)
-    sigma_delta  : écart-type du bruit individuel sur chaque particule
+    Retourne (M, p_avg, efficiency_average)
+    sigma_common : variance composante commune (eta)
+    sigma_delta  : variance bruit individuel
     """
     if model == 'S2':
-        # baseline shared lambda_vec (structure commune)
         z = np.random.beta(alpha, beta, N)
         cos_t = 2*z - 1
         theta = np.arccos(cos_t)
@@ -145,10 +148,7 @@ def simulate_ghz_enhanced(model='S2', alpha=0.5, beta=0.5,
         sin_t = np.sin(theta)
         base = np.column_stack((sin_t*np.cos(phi), sin_t*np.sin(phi), cos_t))
 
-        # common fluctuation (eta) same for all particles but different per trial
         eta_common = np.random.normal(0, sigma_common, (N,3))
-
-        # small independent fluctuations for each particle
         delta1 = np.random.normal(0, sigma_delta, (N,3))
         delta2 = np.random.normal(0, sigma_delta, (N,3))
         delta3 = np.random.normal(0, sigma_delta, (N,3))
@@ -162,7 +162,6 @@ def simulate_ghz_enhanced(model='S2', alpha=0.5, beta=0.5,
         l2 = normalize(base + eta_common + delta2)
         l3 = normalize(base + eta_common + delta3)
 
-        # extra random secondary vectors
         def sample_s2():
             z2 = np.random.beta(alpha, beta, N)
             cos_t2 = 2*z2 - 1
@@ -209,19 +208,17 @@ def simulate_ghz_enhanced(model='S2', alpha=0.5, beta=0.5,
             E = np.mean(product)
             eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
-            return E, p_avg, eff
+            return E, p_avg, eff, (A1, A2, A3, p1, p2, p3)
 
-        E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x)
-        E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y)
-        E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y)
-        E_yyx, p_yyx, eff_yyx = get_outcomes(y, y, x)
+        E_xxx, p_xxx, eff_xxx, data_xxx = get_outcomes(x, x, x)
+        E_xyy, p_xyy, eff_xyy, data_xyy = get_outcomes(x, y, y)
+        E_yxy, p_yxy, eff_yxy, data_yxy = get_outcomes(y, x, y)
+        E_yyx, p_yyx, eff_yyx, data_yyx = get_outcomes(y, y, x)
 
     elif model == 'S1':
-        # S1 analogue: angles on circle
         z = np.random.beta(alpha, beta, N)
         lambda_angle = 2*np.pi*z
-
-        eta_common = np.random.normal(0, sigma_common, N)  # scalar common noise
+        eta_common = np.random.normal(0, sigma_common, N)
         delta1 = np.random.normal(0, sigma_delta, N)
         delta2 = np.random.normal(0, sigma_delta, N)
         delta3 = np.random.normal(0, sigma_delta, N)
@@ -267,93 +264,234 @@ def simulate_ghz_enhanced(model='S2', alpha=0.5, beta=0.5,
             E = np.mean(product)
             eff = np.mean((A1 == 1) & (A2 == 1) & (A3 == 1))
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
-            return E, p_avg, eff
+            return E, p_avg, eff, (A1, A2, A3, p1, p2, p3)
 
-        E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x)
-        E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y)
-        E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y)
-        E_yyx, p_yyx, eff_yyx = get_outcomes(y, y, x)
+        E_xxx, p_xxx, eff_xxx, data_xxx = get_outcomes(x, x, x)
+        E_xyy, p_xyy, eff_xyy, data_xyy = get_outcomes(x, y, y)
+        E_yxy, p_yxy, eff_yxy, data_yxy = get_outcomes(y, x, y)
+        E_yyx, p_yyx, eff_yyx, data_yyx = get_outcomes(y, y, x)
 
-    # M, average p and average efficiency
+    # M and average p/eff:
     M = abs(E_xyy + E_yxy + E_yyx - E_xxx)
     p_avg = (p_xxx + p_xyy + p_yxy + p_yyx) / 4.0
-    terms = (eff_xxx + eff_xyy + eff_yxy + eff_yyx) / 4.0
-    return M, p_avg, terms
+    eff_avg = (eff_xxx + eff_xyy + eff_yxy + eff_yyx) / 4.0
 
-# -----------------------------
-# Small grid search to "improve" double-slit visibilities
-# (keeps your model but searches a few parameter combos)
-# -----------------------------
-def optimize_double_slit_S2(distribution='uniform', N=50000):
-    # small grid around typical params
-    gamma_list = [2.5*np.pi, 3.0*np.pi, 3.5*np.pi]
-    k_list = [0.9, 1.0, 1.1, 1.2]
-    g_list = [0.4, 0.5, 0.6]
-    best = None
-    for gamma in gamma_list:
-        for k in k_list:
-            for g in g_list:
-                Imax, Imin, V, fr = simulate_double_slit_s2(distribution=distribution, N=N, gamma=gamma, k=k, g=g)
-                if best is None or V > best[0]:
-                    best = (V, gamma, k, g, Imax, Imin, fr)
-    return best  # returns tuple (V, gamma, k, g, Imax, Imin, fr)
+    # Return also raw data for potential post-selection processing
+    raw_data = {
+        'xxx': data_xxx,
+        'xyy': data_xyy,
+        'yxy': data_yxy,
+        'yyx': data_yyx
+    }
 
-def optimize_double_slit_S1(distribution='uniform', N=50000):
-    gamma_list = [4.0*np.pi, 5.0*np.pi, 6.0*np.pi]
-    k_list = [0.3, 0.5, 0.55, 0.7]
-    noise_list = [np.pi/4, np.pi/3, np.pi/2]
+    return M, p_avg, eff_avg, raw_data
+
+# ========================================
+# GHZ with post-selection minimale automatique
+# ========================================
+def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.999, max_fraction=0.9):
+    """
+    raw_data: dict with keys 'xxx','xyy','yxy','yyx' each mapping to tuple
+              (A1,A2,A3,p1,p2,p3) arrays for N trials.
+    eps_target: target conditioned mean close to expected_sign (>= eps_target * expected_sign)
+    max_fraction: do not allow selecting more than this fraction per setting (safety)
+    Returns:
+      results dict containing per-setting selection fractions, conditioned E, and M_postselected
+    Behavior:
+      For each setting, compute a "score" estimating the probability the product equals expected_sign:
+        score = prod_i (p_i if expected_sign==1 else (1 - p_i))
+      Then sort trials by score descending and find minimal top-k fraction such that conditioned mean(product[top_k]) 
+      >= eps_target (for expected_sign=1) or <= -eps_target (for expected_sign=-1).
+      If not achievable with fraction <= max_fraction, fall back to mask product==expected_sign.
+    """
+    expected_signs = {'xxx': 1, 'xyy': -1, 'yxy': -1, 'yyx': -1}
+    N = raw_data['xxx'][0].shape[0]
+    E_cond = {}
+    fractions = {}
+    selected_indices = {}
+
+    # helper to compute product array
+    def product_from_arrays(arr_tuple):
+        A1, A2, A3, p1, p2, p3 = arr_tuple
+        return A1 * A2 * A3, p1, p2, p3
+
+    for key in ['xxx','xyy','yxy','yyx']:
+        prod_arr, p1, p2, p3 = product_from_arrays(raw_data[key])
+        expected = expected_signs[key]
+        # compute score estimating chance that product == expected (based on p's)
+        if expected == 1:
+            score = p1 * p2 * p3
+        else:
+            # chance product == -1 roughly when one or three of the Ai are -1;
+            # approximate by (1-p1)*(p2)*(p3) + ... but simpler: use
+            # score = (1-p1)*(1-p2)*(1-p3) + (1-p1)*p2*p3 + p1*(1-p2)*p3 + p1*p2*(1-p3)
+            # This equals probability that product = -1 under independent Bernoulli approx
+            a = (1-p1)*(1-p2)*(1-p3)
+            b = (1-p1)*p2*p3
+            c = p1*(1-p2)*p3
+            d = p1*p2*(1-p3)
+            score = a + b + c + d
+
+        # sort by score descending
+        idx_sorted = np.argsort(-score)  # descending
+        prod_sorted = prod_arr[idx_sorted]
+
+        # try cumulative top-k to reach eps_target
+        achieved = False
+        # convert target to inequality depending on expected sign
+        # For expected 1: want mean(prod_selected) >= eps_target
+        # For expected -1: want mean(prod_selected) <= -eps_target
+        # We'll iterate over fractions to find minimal fraction
+        fractions_to_try = np.concatenate((np.linspace(0.001, 0.01, 10),
+                                           np.linspace(0.01, 0.1, 10),
+                                           np.linspace(0.1, max_fraction, 20)))
+        for frac in fractions_to_try:
+            k = max(1, int(np.ceil(frac * N)))
+            sel_mean = np.mean(prod_sorted[:k])
+            if expected == 1 and sel_mean >= eps_target:
+                fractions[key] = k / N
+                selected_indices[key] = idx_sorted[:k]
+                E_cond[key] = sel_mean
+                achieved = True
+                break
+            if expected == -1 and sel_mean <= -eps_target:
+                fractions[key] = k / N
+                selected_indices[key] = idx_sorted[:k]
+                E_cond[key] = sel_mean
+                achieved = True
+                break
+        if not achieved:
+            # fallback: trivial selection where product == expected
+            mask = (prod_arr == expected)
+            k = np.sum(mask)
+            if k == 0:
+                # can't select any -> choose no selection (E conditional is NaN). Use mean original
+                fractions[key] = 0.0
+                selected_indices[key] = np.array([], dtype=int)
+                E_cond[key] = np.mean(prod_arr)  # not good, but fallback
+            else:
+                fractions[key] = k / N
+                selected_indices[key] = np.where(mask)[0]
+                E_cond[key] = np.mean(prod_arr[mask])
+
+    # Build final conditioned E values for all settings and compute M_postselected
+    E_values = {}
+    for key in ['xxx','xyy','yxy','yyx']:
+        idx = selected_indices.get(key, np.array([], dtype=int))
+        prod_arr = product_from_arrays(raw_data[key])[0]
+        if idx.size == 0:
+            # no selection -> use original mean
+            E_values[key] = float(np.mean(prod_arr))
+        else:
+            E_values[key] = float(np.mean(prod_arr[idx]))
+
+    M_post = abs(E_values['xyy'] + E_values['yxy'] + E_values['yyx'] - E_values['xxx'])
+    # overall efficiency = average selected fraction
+    overall_eff = np.mean([fractions.get(k, 0.0) for k in ['xxx','xyy','yxy','yyx']])
+
+    return {
+        'fractions': fractions,
+        'E_cond': E_values,
+        'M_post': M_post,
+        'overall_efficiency': overall_eff
+    }
+
+# ========================================
+# Tentative reproduction WITHOUT post-selection:
+# grid search over sigma_common / sigma_delta to maximize M (no post-selection)
+# ========================================
+def reproduce_without_postselection_grid(model='S2', alpha=0.5, beta=0.5, N=80000):
+    # small grid (kept coarse to be fast)
+    sigma_common_list = [0.0, 0.005, 0.01, 0.02, 0.05, 0.08]
+    sigma_delta_list = [0.0, 0.0005, 0.001, 0.005, 0.01]
     best = None
-    for gamma in gamma_list:
-        for k in k_list:
-            for noise in noise_list:
-                Imax, Imin, V, fr = simulate_double_slit_s1(distribution=distribution, N=N, gamma=gamma, k=k, noise_sigma=noise)
-                # choose the params that produce the target behavior (high or low V depending on taste)
-                if best is None or V > best[0]:
-                    best = (V, gamma, k, noise, Imax, Imin, fr)
+    for sc in sigma_common_list:
+        for sd in sigma_delta_list:
+            M, p_avg, eff_avg, _ = simulate_ghz_enhanced(model=model, alpha=alpha, beta=beta,
+                                                         sigma_common=sc, sigma_delta=sd, N=N)
+            if best is None or M > best[0]:
+                best = (M, sc, sd, p_avg, eff_avg)
     return best
 
-# -----------------------------
-# Run comparisons
-# -----------------------------
+# ========================================
+# Run everything and print results (complete)
+# ========================================
 if __name__ == "__main__":
-    # CHSH quick run (unchanged)
+    # 1) CHSH quick run (as you did)
     print("CHSH (Bell) RESULTS:")
     for pa, pb in [(0.5,0.5), (0.4,0.6), (0.3,0.7), (0.35,0.35)]:
         S, pa_avg, pb_avg = compute_S(pa, pb)
         print(f"pa={pa}, pb={pb}: |S|={S:.3f}, P(A+)={pa_avg:.3f}, P(B+)={pb_avg:.3f}")
 
-    # Double-slit baseline and optimized (S2)
+    # 2) Double-slit baseline + small optimizations
     print("\nDOUBLE-SLIT S2 baseline & optimization:")
     Imax_u, Imin_u, V_u, fr_u = simulate_double_slit_s2('uniform', N=100000)
     print(f"S2 uniform baseline: Imax={Imax_u:.3f}, Imin={Imin_u:.3f}, V={V_u:.3f}, Fringes={fr_u}")
-    best_s2 = optimize_double_slit_S2(distribution='uniform', N=40000)
+    # small grid search (kept small)
+    best_s2 = None
+    gamma_list = [2.5*np.pi, 3.0*np.pi, 3.5*np.pi]
+    k_list = [0.9, 1.0, 1.1, 1.2]
+    g_list = [0.4, 0.5, 0.6]
+    for gamma in gamma_list:
+        for k in k_list:
+            for g in g_list:
+                Imax_t, Imin_t, V_t, fr_t = simulate_double_slit_s2('uniform', N=40000, gamma=gamma, k=k, g=g)
+                if best_s2 is None or V_t > best_s2[0]:
+                    best_s2 = (V_t, gamma, k, g, Imax_t, Imin_t, fr_t)
     print("S2 best found (small grid): V={:.3f}, gamma={:.3f}π, k={}, g={}".format(best_s2[0], best_s2[1]/np.pi, best_s2[2], best_s2[3]))
     print(" --> Imax, Imin, fringes =", best_s2[4], best_s2[5], best_s2[6])
 
-    # Double-slit S1 baseline & optimized
     print("\nDOUBLE-SLIT S1 baseline & optimization:")
     Imax1_u, Imin1_u, V1_u, fr1_u = simulate_double_slit_s1('uniform', N=100000, noise_sigma=np.pi/3)
     print(f"S1 uniform baseline: Imax={Imax1_u:.3f}, Imin={Imin1_u:.3f}, V={V1_u:.3f}, Fringes={fr1_u}")
-    best_s1 = optimize_double_slit_S1(distribution='uniform', N=40000)
+    # small grid search for S1
+    best_s1 = None
+    gamma_list_s1 = [4.0*np.pi, 5.0*np.pi, 6.0*np.pi]
+    k_list_s1 = [0.3, 0.5, 0.55, 0.7]
+    noise_list = [np.pi/4, np.pi/3, np.pi/2]
+    for gamma in gamma_list_s1:
+        for k in k_list_s1:
+            for noise in noise_list:
+                Imax_t, Imin_t, V_t, fr_t = simulate_double_slit_s1('uniform', N=40000, gamma=gamma, k=k, noise_sigma=noise)
+                if best_s1 is None or V_t > best_s1[0]:
+                    best_s1 = (V_t, gamma, k, noise, Imax_t, Imin_t, fr_t)
     print("S1 best found (small grid): V={:.3f}, gamma={:.3f}π, k={}, noise_sigma={:.3f}".format(best_s1[0], best_s1[1]/np.pi, best_s1[2], best_s1[3]))
     print(" --> Imax, Imin, fringes =", best_s1[4], best_s1[5], best_s1[6])
 
-    # GHZ enhanced - tests: vary sigma_common / sigma_delta to see effect
+    # 3) GHZ enhanced (no post-selection) sweep (small)
     print("\nGHZ enhanced - sweep sigma_common (keep sigma_delta small):")
     for sigma_common in [0.0, 0.005, 0.01, 0.02, 0.05]:
-        M, p_avg, terms = simulate_ghz_enhanced('S2', sigma_common=sigma_common, sigma_delta=0.001, N=100000)
+        M, p_avg, terms, raw = simulate_ghz_enhanced('S2', sigma_common=sigma_common, sigma_delta=0.001, N=100000)
         print(f"sigma_common={sigma_common:.3f} | M={M:.3f}, P(±)={p_avg:.3f}, eff={terms:.3f}")
 
     print("\nGHZ enhanced - sweep sigma_delta (keep sigma_common moderate):")
     for sigma_delta in [0.000, 0.001, 0.005, 0.01, 0.02]:
-        M, p_avg, terms = simulate_ghz_enhanced('S2', sigma_common=0.02, sigma_delta=sigma_delta, N=100000)
+        M, p_avg, terms, raw = simulate_ghz_enhanced('S2', sigma_common=0.02, sigma_delta=sigma_delta, N=100000)
         print(f"sigma_delta={sigma_delta:.4f} | M={M:.3f}, P(±)={p_avg:.3f}, eff={terms:.3f}")
 
-    # Final sample: a tuned attempt (strong common noise, tiny individual noise)
     print("\nGHZ tuned attempt (strong common, tiny individual):")
-    M_tuned, p_tuned, eff_tuned = simulate_ghz_enhanced('S2', sigma_common=0.08, sigma_delta=0.0005, N=150000)
+    M_tuned, p_tuned, eff_tuned, raw_tuned = simulate_ghz_enhanced('S2', sigma_common=0.08, sigma_delta=0.0005, N=150000)
     print(f"Tuned S2: M={M_tuned:.3f}, P(±)={p_tuned:.3f}, eff={eff_tuned:.3f}")
 
-    # Optional: S1 versions
-    M_s1, p_s1, eff_s1 = simulate_ghz_enhanced('S1', sigma_common=0.02, sigma_delta=0.001, N=100000)
-    print(f"Sample S1: M={M_s1:.3f}, P(±)={p_s1:.3f}, eff={eff_s1:.3f}")
+    # 4) GHZ with minimal post-selection computed from raw_tuned (or raw from a run)
+    # Use raw_tuned if available, else fallback to a fresh run
+    print("\nGHZ POST-SELECTION minimal attempt (from tuned run raw data):")
+    raw_for_post = raw_tuned if 'raw_tuned' in locals() else simulate_ghz_enhanced('S2', sigma_common=0.02, sigma_delta=0.001, N=150000)[3]
+    post_results = ghz_minimal_postselection_from_raw(raw_for_post, eps_target=0.999, max_fraction=0.9)
+    print("Per-setting selected fractions:", {k: round(v,4) for k,v in post_results['fractions'].items()})
+    print("Conditioned E values (post-selected):", {k: round(v,4) for k,v in post_results['E_cond'].items()})
+    print("M_postselected =", round(post_results['M_post'],4))
+    print("Overall average selection fraction (efficiency) =", round(post_results['overall_efficiency'],4))
+
+    # 5) Try to reproduce the post-selected M WITHOUT post-selection (small grid search)
+    print("\nTentative reproduction WITHOUT post-selection (small grid search):")
+    best_repro = reproduce_without_postselection_grid(model='S2', N=80000)
+    print("Best found (no post-selection): M={:.3f}, sigma_common={}, sigma_delta={}, Pavg={:.3f}, effavg={:.3f}".format(
+        best_repro[0], best_repro[1], best_repro[2], best_repro[3], best_repro[4]
+    ))
+
+    # Summary message
+    print("\n--- FINISHED: GHZ comparison (no-post vs minimal post-selection) ---")
+    print("Note: post-selection can trivially reach M≈4 by selecting trials with product == expected_sign.")
+    print("The minimal-postselection routine above attempts to find a light selection per setting that yields E≈±1.")
+    print("If you want a stricter 'minimal' criterion (e.g., maximize M while keeping average fraction >= X%), tell me X% and j'adapte.")
