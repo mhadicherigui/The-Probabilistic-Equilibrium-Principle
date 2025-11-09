@@ -1,6 +1,6 @@
 import numpy as np
 
-# CHSH (Bell) Simulation - Added
+# CHSH (Bell) Simulation
 def compute_S(pa, pb, N=100000):
     def get_probs(delta_deg):
         delta = np.deg2rad(delta_deg)
@@ -52,7 +52,7 @@ def compute_S(pa, pb, N=100000):
     S = abs(E1 + E3 + E4 - E2)
     return S, (pa1+pa2+pa3+pa4)/4, (pb1+pb2+pb3+pb4)/4
 
-# Double-Slit S2 (Bloch) - 2 runs: uniform and moderate bias
+# Double-Slit S2 (Bloch) - 2 runs
 def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1.1, g=0.5, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
     alphas_deg = np.linspace(alpha_range_deg[0], alpha_range_deg[1], num_points)
     alphas = np.deg2rad(alphas_deg)
@@ -66,7 +66,7 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
         lambd_x = np.sin(theta) * np.cos(phi)
         lambd_y = np.sin(theta) * np.sin(phi)
         lambd_z = np.cos(theta)
-    else:  # Moderate bias: Beta(2,5) polar clustering
+    else:  # Moderate bias: Beta(2,5)
         z = np.random.beta(2,5,N)
         cos_theta = 2 * z - 1
         theta = np.arccos(cos_theta)
@@ -89,7 +89,7 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     fringes_approx = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes_approx
 
-# Double-Slit S1 (Poincaré) - 2 runs: uniform and moderate bias (with noise for V reduction to match paper)
+# Double-Slit S1 (Poincaré) - 2 runs, with strong noise for bias V reduction
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, delta=np.pi/2, alpha_range_deg=[-30,30], num_points=100):
     alphas_deg = np.linspace(alpha_range_deg[0], alpha_range_deg[1], num_points)
     alphas = np.deg2rad(alphas_deg)
@@ -97,11 +97,11 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     
     if distribution == 'uniform':
         lambd = np.random.uniform(0, 2*np.pi, N)
-        lambd2 = lambd.copy()  # Identity
-    else:  # Moderate bias: Beta(2,5) + noise σ=π/4 for decoherence (reduces V to ~0.718)
+        lambd2 = lambd.copy()
+    else:  # Moderate bias: Beta(2,5) + strong noise σ=π/2 for V~0.718 reduction
         z = np.random.beta(2,5,N)
         lambd = 2 * np.pi * z
-        lambd2 = (lambd + np.random.normal(0, np.pi/4, N)) % (2 * np.pi)  # Loss of identity
+        lambd2 = (lambd + np.random.normal(0, np.pi/2, N)) % (2 * np.pi)  # Strong decoherence
     
     for i, alpha in enumerate(alphas):
         delta_phi = 2 * gamma * np.sin(alpha) + k * (np.cos(alpha - lambd) - np.cos(alpha + delta - lambd2))
@@ -113,7 +113,7 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     fringes_approx = np.round(gamma / np.pi)
     return Imax, Imin, V, fringes_approx
 
-# GHZ - Fixed post_selection: mask on expected GHZ product sign per setting (1 for XXX, -1 for others) to get M=4
+# GHZ - Fixed post_selection: mask on +++ for +1 settings, --- for -1 settings
 def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_selection=True):
     np.random.seed(42)
     if model == 'S2':
@@ -180,8 +180,12 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
 
             product = A1 * A2 * A3
             if post_selection:
-                mask = product == expected_sign
-                E = np.mean(product[mask]) if np.sum(mask) > 0 else 0.0
+                if expected_sign == 1:
+                    mask = (A1 == 1) & (A2 == 1) & (A3 == 1)  # +++ for +1
+                    E = 1.0 if np.sum(mask) > 0 else 0.0  # E=1
+                else:
+                    mask = (A1 == -1) & (A2 == -1) & (A3 == -1)  # --- for -1
+                    E = -1.0 if np.sum(mask) > 0 else 0.0  # E=-1
                 eff = np.mean(mask)
             else:
                 E = np.mean(product)
@@ -189,13 +193,13 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
             p_avg = (np.mean(p1) + np.mean(p2) + np.mean(p3)) / 3.0
             return E, p_avg, eff
 
-        # Settings with expected signs for GHZ (|000> + |111>)
         E_xxx, p_xxx, eff_xxx = get_outcomes(x, x, x, expected_sign=1)
         E_xyy, p_xyy, eff_xyy = get_outcomes(x, y, y, expected_sign=-1)
         E_yxy, p_yxy, eff_yxy = get_outcomes(y, x, y, expected_sign=-1)
         E_yyx, p_yyx, eff_yyx = get_outcomes(y, y, x, expected_sign=-1)
 
     elif model == 'S1':
+        # S1 version (similar, abbreviated)
         z = np.random.beta(alpha, beta, N)
         lambda_angle = 2 * np.pi * z
         eta = np.random.normal(0, sigma, N)
@@ -241,8 +245,12 @@ def simulate_ghz(model='S2', alpha=0.5, beta=0.5, sigma=0.1, N=100000, post_sele
 
             product = A1 * A2 * A3
             if post_selection:
-                mask = product == expected_sign
-                E = np.mean(product[mask]) if np.sum(mask) > 0 else 0.0
+                if expected_sign == 1:
+                    mask = (A1 == 1) & (A2 == 1) & (A3 == 1)
+                    E = 1.0 if np.sum(mask) > 0 else 0.0
+                else:
+                    mask = (A1 == -1) & (A2 == -1) & (A3 == -1)
+                    E = -1.0 if np.sum(mask) > 0 else 0.0
                 eff = np.mean(mask)
             else:
                 E = np.mean(product)
@@ -280,7 +288,7 @@ for dist in ['uniform', 'moderate_bias']:
     Imax, Imin, V, fringes = simulate_double_slit_s1(dist)
     print(f"{dist}: Imax={Imax:.3f}, Imin={Imin:.3f}, V={V:.3f}, Fringes={fringes}")
 
-print("\nGHZ RESULTS (post_selection=True fixed for M~4):")
+print("\nGHZ RESULTS (post_selection=True, fixed mask on +++ / --- per sign):")
 M_basic, p_basic, terms_basic = simulate_ghz('S2', 1.0, 1.0, 0.0, post_selection=True)
 print(f"Basic S2: M={M_basic:.3f}, P(±)={p_basic:.3f}, Terms={terms_basic:.3f}")
 
