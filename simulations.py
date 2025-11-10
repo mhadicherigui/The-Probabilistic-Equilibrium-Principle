@@ -1,20 +1,47 @@
-# ghz_full_improved.py
-# Script complet : CHSH, double-slit S2/S1 optimisées,
-# GHZ enhanced (no post-selection), GHZ minimal post-selection comparator,
-# and reproduction grid search.
+# ghz_experiment_suite.py
+# Suite d'expériences complète (Option B - sampling variants only)
+# - CHSH (inchangé)
+# - Double-slit S2 & S1 : scan gamma + optimisation locale
+# - GHZ : grid over (alpha_beta, sigma_common, sigma_delta, N) WITHOUT changing rules
+# - Computes P(+,+,+) and P(-,-,-) (analysis only)
+# - Minimal post-selection comparator
+# - Saves CSV and JSON in results/
 #
-# Dépendances : numpy
-# Usage : python ghz_full_improved.py
+# Usage: python ghz_experiment_suite.py
+# Dépendances: numpy (pip install numpy)
 
 import numpy as np
+import os
+import csv
+import json
 import time
+from datetime import datetime
 
-# reproducibility
 np.random.seed(42)
 
-# ========================================
-# CHSH (Bell) Simulation - unchanged logic
-# ========================================
+RESULTS_DIR = "results"
+os.makedirs(RESULTS_DIR, exist_ok=True)
+
+# -----------------------
+# Utility helpers
+# -----------------------
+def now_tag():
+    return datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+
+def save_json(obj, filename):
+    with open(filename, "w") as f:
+        json.dump(obj, f, indent=2)
+
+def save_csv(rows, header, filename):
+    with open(filename, "w", newline='') as f:
+        w = csv.writer(f)
+        w.writerow(header)
+        for r in rows:
+            w.writerow(r)
+
+# -----------------------
+# CHSH - unchanged
+# -----------------------
 def compute_S(pa, pb, N=100000):
     def get_probs(delta_deg):
         delta = np.deg2rad(delta_deg)
@@ -68,11 +95,14 @@ def compute_S(pa, pb, N=100000):
     S = abs(E1 + E3 + E4 - E2)
     avg_pa = (pa1 + pa2 + pa3 + pa4) / 4
     avg_pb = (pb1 + pb2 + pb3 + pb4) / 4
-    return S, avg_pa, avg_pb
+    # std error estimate for S (approx)
+    var_terms = [(1 - E1**2), (1 - E2**2), (1 - E3**2), (1 - E4**2)]
+    SE_S = np.sqrt(sum(var_terms)) / np.sqrt(N)
+    return S, avg_pa, avg_pb, SE_S
 
-# ========================================
-# Double-Slit S2 (Bloch) - simulate + optimizer
-# ========================================
+# -----------------------
+# Double-slit S2 / S1
+# -----------------------
 def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1.1, g=0.5):
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
     I = np.zeros_like(alphas)
@@ -86,7 +116,7 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
         lambd_x = np.sin(theta) * np.cos(phi)
         lambd_y = np.sin(theta) * np.sin(phi)
         lambd_z = np.cos(theta)
-    else:  # moderate_bias Beta(2,5)
+    else:
         z = np.random.beta(2,5,N)
         cos_theta = 2*z - 1
         theta = np.arccos(cos_theta)
@@ -108,23 +138,6 @@ def simulate_double_slit_s2(distribution='uniform', N=100000, gamma=3*np.pi, k=1
     fringes = int(round(float(gamma) / np.pi))
     return Imax, Imin, V, fringes
 
-def optimize_double_slit_s2(distribution='uniform', N=50000):
-    # coarse grid search (fast) - adjust ranges if you want fine tuning
-    gamma_list = [2.5*np.pi, 3.0*np.pi, 3.5*np.pi]
-    k_list = [0.7, 0.9, 1.0, 1.1]
-    g_list = [0.35, 0.45, 0.55]
-    best = None
-    for gamma in gamma_list:
-        for k in k_list:
-            for g in g_list:
-                Imax, Imin, V, fr = simulate_double_slit_s2(distribution=distribution, N=N, gamma=gamma, k=k, g=g)
-                if best is None or V > best[0]:
-                    best = (V, gamma, k, g, Imax, Imin, fr)
-    return best
-
-# ========================================
-# Double-Slit S1 (Poincaré) - simulate + optimizer
-# ========================================
 def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0.551, noise_sigma=np.pi/3):
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
     I = np.zeros_like(alphas)
@@ -147,36 +160,16 @@ def simulate_double_slit_s1(distribution='uniform', N=100000, gamma=5*np.pi, k=0
     fringes = int(round(float(gamma) / np.pi))
     return Imax, Imin, V, fringes
 
-def optimize_double_slit_s1(distribution='uniform', N=50000):
-    gamma_list = [4.0*np.pi, 5.0*np.pi, 6.0*np.pi]
-    k_list = [0.3, 0.4, 0.55, 0.7]
-    noise_list = [np.pi/4, np.pi/3, np.pi/2]
-    best = None
-    for gamma in gamma_list:
-        for k in k_list:
-            for noise in noise_list:
-                Imax, Imin, V, fr = simulate_double_slit_s1(distribution=distribution, N=N, gamma=gamma, k=k, noise_sigma=noise)
-                if best is None or V > best[0]:
-                    best = (V, gamma, k, noise, Imax, Imin, fr)
-    return best
-
-# ========================================
-# GHZ enhanced (NO post-selection) - improved control
-# - Allows Beta shapes to concentrate the base distribution
-# - Stronger common component vs tiny individual noise
-# ========================================
-def simulate_ghz_enhanced(model='S2', alpha=5.0, beta=5.0,
-                          sigma_common=0.002, sigma_delta=0.0005, N=100000):
-    """
-    model: 'S2' (Bloch vector) or 'S1' (angles)
-    alpha,beta: Beta distribution parameters for base (default concentrated Beta(5,5))
-    sigma_common: std of common perturbation (eta)
-    sigma_delta: std of per-particle noise
-    returns: (M, p_avg, eff_avg, raw_data)
-    raw_data holds per-setting arrays for possible post-selection
-    """
+# -----------------------
+# GHZ enhanced (OPTION B - sampling changes only)
+# returns (M, p_avg, eff_avg, raw_data, counts_ppp_mmm)
+# raw_data: dict of tuples (A1,A2,A3,p1,p2,p3) for each setting
+# counts_ppp_mmm: dict with counts for (+,+,+) and (-,-,-) across all trials and settings (for analysis)
+# -----------------------
+def simulate_ghz_variant(model='S2', alpha=5.0, beta=5.0, sigma_common=0.002, sigma_delta=0.0005, N=100000):
+    # This function keeps the exact same rule mapping (p from R = s1*s2 + s3) as in your model.
+    # ONLY sampling (Beta, sigma_common, sigma_delta, N) is changed.
     if model == 'S2':
-        # base distribution concentrated via Beta(alpha,beta)
         z = np.random.beta(alpha, beta, N)
         cos_t = 2*z - 1
         theta = np.arccos(cos_t)
@@ -184,7 +177,6 @@ def simulate_ghz_enhanced(model='S2', alpha=5.0, beta=5.0,
         sin_t = np.sin(theta)
         base = np.column_stack((sin_t*np.cos(phi), sin_t*np.sin(phi), cos_t))
 
-        # common fluctuation and small independent deltas
         eta_common = np.random.normal(0, sigma_common, (N,3))
         delta1 = np.random.normal(0, sigma_delta, (N,3))
         delta2 = np.random.normal(0, sigma_delta, (N,3))
@@ -199,7 +191,6 @@ def simulate_ghz_enhanced(model='S2', alpha=5.0, beta=5.0,
         l2 = normalize(base + eta_common + delta2)
         l3 = normalize(base + eta_common + delta3)
 
-        # secondary randoms
         def sample_s2():
             z2 = np.random.beta(alpha, beta, N)
             cos_t2 = 2*z2 - 1
@@ -254,7 +245,6 @@ def simulate_ghz_enhanced(model='S2', alpha=5.0, beta=5.0,
         E_yyx, p_yyx, eff_yyx, data_yyx = get_outcomes(y, y, x)
 
     elif model == 'S1':
-        # S1 angle-based
         z = np.random.beta(alpha, beta, N)
         lambda_angle = 2*np.pi*z
         eta_common = np.random.normal(0, sigma_common, N)
@@ -320,19 +310,25 @@ def simulate_ghz_enhanced(model='S2', alpha=5.0, beta=5.0,
         'yxy': data_yxy,
         'yyx': data_yyx
     }
-    return float(M), float(p_avg), float(eff_avg), raw_data
 
-# ========================================
-# GHZ minimal post-selection routine (automatic/light)
-# ========================================
+    # compute P(+,+,+) and P(-,-,-) across the 4 settings aggregated (counts)
+    counts_ppp = 0
+    counts_mmm = 0
+    total_trials = N * 4  # 4 settings each N trials
+    for key in ['xxx','xyy','yxy','yyx']:
+        A1, A2, A3, p1, p2, p3 = raw_data[key]
+        # count per setting where all +1 or all -1
+        counts_ppp += int(np.sum((A1 == 1) & (A2 == 1) & (A3 == 1)))
+        counts_mmm += int(np.sum((A1 == -1) & (A2 == -1) & (A3 == -1)))
+    p_ppp = counts_ppp / total_trials
+    p_mmm = counts_mmm / total_trials
+    counts_summary = {'ppp': counts_ppp, 'mmm': counts_mmm, 'p_ppp': p_ppp, 'p_mmm': p_mmm}
+    return float(M), float(p_avg), float(eff_avg), raw_data, counts_summary
+
+# -----------------------
+# Minimal post-selection (same as earlier)
+# -----------------------
 def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.99, max_fraction=0.1):
-    """
-    raw_data: dict with keys 'xxx','xyy','yxy','yyx' containing tuples
-              (A1,A2,A3,p1,p2,p3) arrays for N trials.
-    eps_target: desired absolute mean for conditioned product (e.g. 0.99)
-    max_fraction: maximum allowed fraction to select per setting (safety)
-    Returns dict with fractions, conditioned E, M_post, overall_efficiency.
-    """
     expected_signs = {'xxx': 1, 'xyy': -1, 'yxy': -1, 'yyx': -1}
     N = raw_data['xxx'][0].shape[0]
     fractions = {}
@@ -342,11 +338,9 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.99, max_fraction=0
     def product_and_scores(arr_tuple, expected):
         A1, A2, A3, p1, p2, p3 = arr_tuple
         prod = A1 * A2 * A3
-        # Score: probability that product == expected under independent Bernoulli approx
         if expected == 1:
             score = p1 * p2 * p3
         else:
-            # probability product == -1 (odd number of -1s)
             a = (1-p1)*(1-p2)*(1-p3)
             b = (1-p1)*p2*p3
             c = p1*(1-p2)*p3
@@ -356,10 +350,8 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.99, max_fraction=0
 
     for key in ['xxx','xyy','yxy','yyx']:
         prod_arr, score = product_and_scores(raw_data[key], expected=expected_signs[key])
-        idx_sorted = np.argsort(-score)  # descending by score
+        idx_sorted = np.argsort(-score)
         prod_sorted = prod_arr[idx_sorted]
-
-        # Try increasing fractions until conditioned mean reaches eps_target (or reach max_fraction)
         achieved = False
         frac_candidates = np.concatenate((
             np.linspace(0.001, 0.01, 10),
@@ -381,9 +373,7 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.99, max_fraction=0
                 E_cond[key] = sel_mean
                 achieved = True
                 break
-
         if not achieved:
-            # fallback: select trials where product equals expected_sign (strict)
             A1, A2, A3, _, _, _ = raw_data[key]
             prod_arr2 = A1 * A2 * A3
             mask = (prod_arr2 == expected_signs[key])
@@ -397,7 +387,6 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.99, max_fraction=0
                 selected_indices[key] = np.where(mask)[0]
                 E_cond[key] = float(np.mean(prod_arr2[mask]))
 
-    # compute final conditioned E and M_post
     E_values = {}
     for key in ['xxx','xyy','yxy','yyx']:
         idx = selected_indices.get(key, np.array([], dtype=int))
@@ -412,90 +401,106 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target=0.99, max_fraction=0
     overall_eff = float(np.mean([fractions.get(k, 0.0) for k in ['xxx','xyy','yxy','yyx']]))
     return {'fractions': fractions, 'E_cond': E_values, 'M_post': float(M_post), 'overall_efficiency': overall_eff}
 
-# ========================================
-# Small grid to try to reproduce post-selected behavior WITHOUT post-selection
-# ========================================
-def reproduce_without_postselection_grid(model='S2', alpha=5.0, beta=5.0, N=80000):
-    sigma_common_list = [0.0, 0.0005, 0.001, 0.002, 0.005, 0.01]
-    sigma_delta_list = [0.0, 0.0001, 0.0005, 0.001, 0.002]
-    best = None
-    for sc in sigma_common_list:
-        for sd in sigma_delta_list:
-            M, p_avg, eff_avg, _ = simulate_ghz_enhanced(model=model, alpha=alpha, beta=beta,
-                                                         sigma_common=sc, sigma_delta=sd, N=N)
-            if best is None or M > best[0]:
-                best = (M, sc, sd, p_avg, eff_avg)
-    return best
+# -----------------------
+# Experiment orchestration
+# -----------------------
+def run_suite(output_tag=None):
+    if output_tag is None:
+        output_tag = now_tag()
+    meta = {'tag': output_tag, 'timestamp': time.time(), 'seed': int(np.random.get_state()[1][0])}
+    summary = {'meta': meta, 'chsh': None, 'double_slit': {}, 'ghz_grid': [], 'ghz_post': None}
 
-# ========================================
-# Main : run the battery of tests and print results
-# ========================================
-def format_time(t): return time.strftime("%H:%M:%S", time.localtime(t))
+    # 1) CHSH quick
+    chsh_rows = []
+    for pa, pb in [(0.5,0.5),(0.4,0.6),(0.3,0.7),(0.35,0.35)]:
+        S, pa_avg, pb_avg, SE_S = compute_S(pa, pb, N=100000)
+        chsh_rows.append((pa, pb, S, pa_avg, pb_avg, SE_S))
+    summary['chsh'] = chsh_rows
+    save_csv(chsh_rows, ['pa','pb','S','pa_emp','pb_emp','SE_S'], os.path.join(RESULTS_DIR, f"chsh_{output_tag}.csv"))
 
-if __name__ == "__main__":
-    start = time.time()
-    print("=== RUN START:", format_time(start))
+    # 2) Double-slit gamma scans (S2 and S1)
+    ds_rows = []
+    gamma_values = [2.5*np.pi, 3.0*np.pi, 3.5*np.pi, 4.0*np.pi, 4.5*np.pi, 5.0*np.pi, 5.5*np.pi, 6.0*np.pi]
+    for model in ['S2','S1']:
+        for gamma in gamma_values:
+            if model == 'S2':
+                Imax, Imin, V, fr = simulate_double_slit_s2('uniform', N=50000, gamma=gamma, k=1.0, g=0.45)
+            else:
+                # for S1 sweep use moderate noise to keep physicality
+                Imax, Imin, V, fr = simulate_double_slit_s1('uniform', N=50000, gamma=gamma, k=0.4, noise_sigma=0.5)
+            ds_rows.append((model, gamma/np.pi, Imax, Imin, V, fr))
+    summary['double_slit']['scan'] = ds_rows
+    save_csv(ds_rows, ['model','gamma_pi','Imax','Imin','V','fringes'], os.path.join(RESULTS_DIR, f"double_slit_gamma_scan_{output_tag}.csv"))
 
-    # CHSH
-    print("\nCHSH (Bell) RESULTS:")
-    for pa, pb in [(0.5,0.5), (0.4,0.6), (0.3,0.7), (0.35,0.35)]:
-        S, pa_avg, pb_avg = compute_S(pa, pb, N=100000)
-        print(f"pa={pa}, pb={pb}: |S|={S:.3f}, P(A+)={pa_avg:.3f}, P(B+)={pb_avg:.3f}")
+    # 3) GHZ grid sweep (alpha_beta, sigma_common, sigma_delta, N)
+    ghz_rows = []
+    alpha_beta_list = [5.0, 10.0, 20.0, 50.0]
+    sigma_common_list = [0.0005, 0.001, 0.002, 0.005]
+    sigma_delta_list = [1e-6, 1e-5, 1e-4, 0.001]
+    N_list = [100000, 300000]  # test influence of N
+    for alpha_beta in alpha_beta_list:
+        for sc in sigma_common_list:
+            for sd in sigma_delta_list:
+                for N in N_list:
+                    M, p_avg, eff, raw, counts = simulate_ghz_variant('S2', alpha=alpha_beta, beta=alpha_beta,
+                                                                       sigma_common=sc, sigma_delta=sd, N=N)
+                    row = {'alpha_beta': alpha_beta, 'sigma_common': sc, 'sigma_delta': sd, 'N': N,
+                           'M': M, 'p_avg': p_avg, 'eff': eff,
+                           'p_ppp': counts['p_ppp'], 'p_mmm': counts['p_mmm']}
+                    ghz_rows.append(row)
+    summary['ghz_grid'] = ghz_rows
+    # save GHZ grid CSV
+    ghz_csv_rows = []
+    for r in ghz_rows:
+        ghz_csv_rows.append([r['alpha_beta'], r['sigma_common'], r['sigma_delta'], r['N'],
+                             r['M'], r['p_avg'], r['eff'], r['p_ppp'], r['p_mmm']])
+    save_csv(ghz_csv_rows, ['alpha_beta','sigma_common','sigma_delta','N','M','p_avg','eff','p_ppp','p_mmm'],
+             os.path.join(RESULTS_DIR, f"ghz_grid_{output_tag}.csv"))
 
-    # Double-slit S2
-    print("\nDOUBLE-SLIT S2 baseline & optimization:")
-    Imax_u, Imin_u, V_u, fr_u = simulate_double_slit_s2('uniform', N=100000, gamma=3*np.pi, k=1.1, g=0.5)
-    print(f"S2 uniform baseline: Imax={Imax_u:.3f}, Imin={Imin_u:.3f}, V={V_u:.3f}, Fringes={fr_u}")
-    best_s2 = optimize_double_slit_s2(distribution='uniform', N=40000)
-    print("S2 best found (grid): V={:.3f}, gamma={:.3f}π, k={}, g={}".format(best_s2[0], best_s2[1]/np.pi, best_s2[2], best_s2[3]))
-    print(" --> Imax, Imin, fringes =", best_s2[4], best_s2[5], best_s2[6])
-
-    # Double-slit S1
-    print("\nDOUBLE-SLIT S1 baseline & optimization:")
-    Imax1_u, Imin1_u, V1_u, fr1_u = simulate_double_slit_s1('uniform', N=100000, gamma=5*np.pi, k=0.551, noise_sigma=np.pi/3)
-    print(f"S1 uniform baseline: Imax={Imax1_u:.3f}, Imin={Imin1_u:.3f}, V={V1_u:.3f}, Fringes={fr1_u}")
-    best_s1 = optimize_double_slit_s1(distribution='uniform', N=40000)
-    print("S1 best found (grid): V={:.3f}, gamma={:.3f}π, k={}, noise_sigma={:.3f}".format(best_s1[0], best_s1[1]/np.pi, best_s1[2], best_s1[3]))
-    print(" --> Imax, Imin, fringes =", best_s1[4], best_s1[5], best_s1[6])
-
-    # GHZ enhanced no post-selection: some recommended test points
-    print("\nGHZ enhanced (no post-selection) - recommended parameter tests:")
-    test_params = [
-        # more concentrated base, tiny delta => stronger correlations
-        {'alpha':5.0, 'beta':5.0, 'sigma_common':0.0005, 'sigma_delta':0.0001},
-        {'alpha':5.0, 'beta':5.0, 'sigma_common':0.001,  'sigma_delta':0.0001},
-        {'alpha':5.0, 'beta':5.0, 'sigma_common':0.002,  'sigma_delta':0.0005},
-        {'alpha':10.0,'beta':10.0,'sigma_common':0.002,  'sigma_delta':0.0002},
-        {'alpha':10.0,'beta':10.0,'sigma_common':0.0005, 'sigma_delta':0.00005}
-    ]
-    for p in test_params:
-        M, pavg, eff, raw = simulate_ghz_enhanced('S2', alpha=p['alpha'], beta=p['beta'],
-                                                 sigma_common=p['sigma_common'], sigma_delta=p['sigma_delta'], N=100000)
-        print("alpha={},beta={},sc={},sd={} -> M={:.3f}, Pavg={:.3f}, eff={:.3f}".format(
-            p['alpha'], p['beta'], p['sigma_common'], p['sigma_delta'], M, pavg, eff
-        ))
-
-    # Use one run to test minimal post-selection
-    print("\nGHZ: minimal post-selection tests (try eps_target and max_fraction variations):")
-    # perform a tuned run (concentrated base but not extreme) to get raw data
-    M_run, p_run, eff_run, raw_run = simulate_ghz_enhanced('S2', alpha=5.0, beta=5.0, sigma_common=0.002, sigma_delta=0.0005, N=120000)
-    print("Raw run (no post): M={:.3f}, Pavg={:.3f}, eff={:.3f}".format(M_run, p_run, eff_run))
+    # 4) Pick a representative raw run for post-selection exploration:
+    #    choose one with high M or mid M for exploration
+    # find candidate with highest M in ghz_rows
+    best = max(ghz_rows, key=lambda x: x['M'])
+    # Re-run with those params to get raw_data
+    raw_M, raw_pavg, raw_eff, raw_data, counts = simulate_ghz_variant('S2', alpha=best['alpha_beta'], beta=best['alpha_beta'],
+                                                                      sigma_common=best['sigma_common'], sigma_delta=best['sigma_delta'], N=best['N'])
+    # explore post-selection eps and max_fraction combos
+    post_results = []
     for eps in [0.95, 0.98, 0.99, 0.995]:
-        for maxf in [0.01, 0.05, 0.1]:
-            post_res = ghz_minimal_postselection_from_raw(raw_run, eps_target=eps, max_fraction=maxf)
-            print(f"eps={eps}, maxf={maxf} -> M_post={post_res['M_post']:.3f}, overall_eff={post_res['overall_efficiency']:.4f}")
+        for maxf in [0.01, 0.05, 0.1, 0.3]:
+            res = ghz_minimal_postselection_from_raw(raw_data, eps_target=eps, max_fraction=maxf)
+            res_row = {'alpha_beta': best['alpha_beta'], 'sigma_common': best['sigma_common'], 'sigma_delta': best['sigma_delta'],
+                       'N': best['N'], 'eps': eps, 'max_fraction': maxf, 'M_post': res['M_post'], 'overall_eff': res['overall_efficiency'],
+                       'fractions': res['fractions']}
+            post_results.append(res_row)
+    summary['ghz_post'] = {'params_subject': best, 'post_results': post_results}
+    save_json(summary, os.path.join(RESULTS_DIR, f"summary_{output_tag}.json"))
 
-    # Try to reproduce WITHOUT post-selection (small grid)
-    print("\nAttempt to reproduce post-selected M without post-selection (grid search):")
-    best_repro = reproduce_without_postselection_grid(model='S2', alpha=5.0, beta=5.0, N=80000)
-    print("Best no-post found: M={:.3f}, sigma_common={}, sigma_delta={}, Pavg={:.3f}, effavg={:.3f}".format(
-        best_repro[0], best_repro[1], best_repro[2], best_repro[3], best_repro[4]
-    ))
+    # save post results CSV
+    post_csv_rows = []
+    for r in post_results:
+        post_csv_rows.append([r['alpha_beta'], r['sigma_common'], r['sigma_delta'], r['N'],
+                              r['eps'], r['max_fraction'], r['M_post'], r['overall_eff']])
+    save_csv(post_csv_rows, ['alpha_beta','sigma_common','sigma_delta','N','eps','max_fraction','M_post','overall_eff'],
+             os.path.join(RESULTS_DIR, f"ghz_post_selection_scan_{output_tag}.csv"))
 
-    end = time.time()
-    print("\n=== RUN END:", format_time(end), " elapsed: {:.1f}s".format(end - start))
-    print("\nNotes / recommandations rapides:")
-    print("- Si tu veux pousser M sans post-sélection, concentre encore plus la distribution de base (Beta large)")
-    print("- Réduis sigma_delta à presque zéro et garde sigma_common non nul, ou augmente la taille N pour meilleure précision")
-    print("- Pour une post-sélection 'légère' vise overall_eff >= 0.01 (1%) ou 0.05 (5%) en choisissant eps_target un peu plus faible (0.98) et max_fraction plus grand")
-    print("- Dis-moi si tu veux que je rende ce script plus agressif (grilles plus fines, N plus grand) ou que je génère CSV / plots / CI yaml pour GitHub Actions.")
+    # Final prints (compact overview)
+    print("\n=== SUMMARY (brief) ===")
+    print("CHSH results saved -> chsh_%s.csv" % output_tag)
+    print("Double-slit gamma scan saved -> double_slit_gamma_scan_%s.csv" % output_tag)
+    print("GHZ parameter grid saved -> ghz_grid_%s.csv" % output_tag)
+    print("GHZ post-selection scan saved -> ghz_post_selection_scan_%s.csv" % output_tag)
+    print("Full JSON summary -> summary_%s.json" % output_tag)
+    return summary
+
+# -----------------------
+# Execute suite
+# -----------------------
+if __name__ == "__main__":
+    tag = now_tag()
+    t0 = time.time()
+    print("Starting GHZ experiment suite (Option B) -- tag:", tag)
+    summary = run_suite(output_tag=tag)
+    t1 = time.time()
+    print("Finished in %.1f s" % (t1 - t0))
+    print("Results saved in folder:", RESULTS_DIR)
