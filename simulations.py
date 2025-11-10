@@ -1,19 +1,15 @@
 #!/usr/bin/env python3
 """
-ghz_presentable.py
+ghz_presentable_en.py
 
-Script présentable et reproductible pour :
- - CHSH (Bell)
- - Double-slit S2 (Bloch) et S1 (Poincaré)
- - GHZ (même règles d'origine) : runs sans post-sélection + post-sélection minimale pour comparaison
+Single-file script (English) producing the same outputs as the prior script.
+- CHSH (Bell)
+- Double-slit S2 (Bloch) and S1 (Poincaré)
+- GHZ (sampling variants only; rules unchanged)
+- Minimal post-selection analysis (analysis only)
 
-Principes :
- - Paramètres par défaut choisis pour être physiquement défendables.
- - Pas de modification des règles probabilistes du modèle GHZ (option B).
- - Résultats imprimés clairement et sauvegardés (CSV + JSON).
- - Dépendance : numpy seulement.
-
-Usage : python ghz_presentable.py
+Usage: python ghz_presentable_en.py
+Dependency: numpy
 """
 
 from __future__ import annotations
@@ -25,7 +21,7 @@ from datetime import datetime
 import time
 
 # ---------------------------
-# Réglages généraux
+# General settings
 # ---------------------------
 SEED = 42
 np.random.seed(SEED)
@@ -37,7 +33,7 @@ NOW_TAG = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
 
 
 # ---------------------------
-# Utilitaires
+# Utilities
 # ---------------------------
 def save_json(obj, path: str):
     with open(path, "w") as f:
@@ -58,11 +54,11 @@ def print_header(title: str):
 
 
 # ---------------------------
-# CHSH (Bell) - identique aux versions testées
+# CHSH (Bell)
 # ---------------------------
 def compute_S(pa: float, pb: float, N: int = 100_000):
     """
-    Retourne (S_abs, pa_emp, pb_emp, SE_S_approx)
+    Returns (S_abs, pa_emp, pb_emp, SE_S_approx)
     """
     def get_probs(delta_deg):
         delta = np.deg2rad(delta_deg)
@@ -126,7 +122,7 @@ def compute_S(pa: float, pb: float, N: int = 100_000):
     avg_pa = (pa1 + pa2 + pa3 + pa4) / 4.0
     avg_pb = (pb1 + pb2 + pb3 + pb4) / 4.0
 
-    # Estimation approchée de l'erreur standard sur S (ordre de grandeur)
+    # Approximate standard error for S
     var_terms = [(1 - E1 ** 2), (1 - E2 ** 2), (1 - E3 ** 2), (1 - E4 ** 2)]
     se_S = np.sqrt(sum(var_terms)) / np.sqrt(N)
 
@@ -138,10 +134,6 @@ def compute_S(pa: float, pb: float, N: int = 100_000):
 # ---------------------------
 def simulate_double_slit_s2(distribution='uniform', N: int = 100_000,
                             gamma: float = 3 * np.pi, k: float = 0.8, g: float = 0.4):
-    """
-    Paramètres par défaut choisis pour être physiquement défendables
-    gamma = 3π (franges raisonnables), k,g ajustés pour bonne visibilité.
-    """
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
     I = np.zeros_like(alphas)
     delta = np.pi / 2
@@ -155,7 +147,7 @@ def simulate_double_slit_s2(distribution='uniform', N: int = 100_000,
         lambd_y = np.sin(theta) * np.sin(phi)
         lambd_z = np.cos(theta)
     else:
-        z = np.random.beta(2, 5, N)  # polar clustering moderate
+        z = np.random.beta(2, 5, N)
         cos_theta = 2 * z - 1
         theta = np.arccos(cos_theta)
         phi = 2 * np.pi * np.random.uniform(0, 1, N)
@@ -182,9 +174,6 @@ def simulate_double_slit_s2(distribution='uniform', N: int = 100_000,
 # ---------------------------
 def simulate_double_slit_s1(distribution='uniform', N: int = 100_000,
                             gamma: float = 5 * np.pi, k: float = 0.3, noise_sigma: float = 0.5):
-    """
-    Par défaut noise_sigma = 0.5 rad (≈29°) : raisonnable physiquement tout en laissant une visibilité élevée.
-    """
     alphas = np.deg2rad(np.linspace(-30, 30, 100))
     I = np.zeros_like(alphas)
     delta = np.pi / 2
@@ -208,20 +197,11 @@ def simulate_double_slit_s1(distribution='uniform', N: int = 100_000,
 
 
 # ---------------------------
-# GHZ variant (Option B) - règles inchangées, on modifie seulement l'échantillonnage
+# GHZ variant (sampling only)
 # ---------------------------
 def simulate_ghz_variant(model: str = 'S2', alpha: float = 10.0, beta: float = 10.0,
                          sigma_common: float = 0.002, sigma_delta: float = 0.0005,
                          N: int = 100_000):
-    """
-    Conserve la règle p_i = clip(R/4 + 0.5).
-    alpha,beta contrôlent la concentration Beta pour la variable lambda de base.
-    Retourne : M, p_avg, efficiency_avg, raw_data, counts_summary
-    raw_data : dict pour chaque réglage ('xxx','xyy','yxy','yyx') -> tuple (A1,A2,A3,p1,p2,p3)
-    counts_summary : p_ppp et p_mmm (analyse seulement)
-    """
-
-    # S2: vecteurs sur la sphère
     if model == 'S2':
         z = np.random.beta(alpha, beta, N)
         cos_t = 2 * z - 1
@@ -298,7 +278,6 @@ def simulate_ghz_variant(model: str = 'S2', alpha: float = 10.0, beta: float = 1
         E_yyx, p_yyx, eff_yyx, data_yyx = get_outcomes(y, y, x)
 
     elif model == 'S1':
-        # angle-based sampling
         z = np.random.beta(alpha, beta, N)
         lambda_angle = 2 * np.pi * z
         eta_common = np.random.normal(0, sigma_common, N)
@@ -354,9 +333,8 @@ def simulate_ghz_variant(model: str = 'S2', alpha: float = 10.0, beta: float = 1
         E_yxy, p_yxy, eff_yxy, data_yxy = get_outcomes(y, x, y)
         E_yyx, p_yyx, eff_yyx, data_yyx = get_outcomes(y, y, x)
 
-    # M and averages
     M = abs(E_xyy + E_yxy + E_yyx - E_xxx)
-    p_avg = (p_xxx + p_xyy + p_yxy + p_yyx) / 4.0
+    p_avg = (p_xxx + p_xyy + p_pxy + p_yyx) / 4.0 if False else (p_xxx + p_xyy + p_yxy + p_yyx) / 4.0
     eff_avg = (eff_xxx + eff_xyy + eff_yxy + eff_yyx) / 4.0
 
     raw_data = {
@@ -383,16 +361,9 @@ def simulate_ghz_variant(model: str = 'S2', alpha: float = 10.0, beta: float = 1
 
 
 # ---------------------------
-# Post-selection minimale automatique (analyse seulement)
+# Minimal post-selection (analysis only)
 # ---------------------------
 def ghz_minimal_postselection_from_raw(raw_data, eps_target: float = 0.98, max_fraction: float = 0.33):
-    """
-    Retour d'un dictionnaire :
-      - fractions (par réglage)
-      - E_cond (E conditionné par réglage)
-      - M_post (valeur M après post-selection)
-      - overall_efficiency (moyenne des fractions sélectionnées)
-    """
     expected_signs = {'xxx': 1, 'xyy': -1, 'yxy': -1, 'yyx': -1}
     N = raw_data['xxx'][0].shape[0]
     fractions = {}
@@ -453,7 +424,6 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target: float = 0.98, max_f
                 selected_indices[key] = np.where(mask)[0]
                 E_cond[key] = float(np.mean(prod_arr2[mask]))
 
-    # Final conditional E and M_post
     E_values = {}
     for key in ['xxx', 'xyy', 'yxy', 'yyx']:
         idx = selected_indices.get(key, np.array([], dtype=int))
@@ -471,38 +441,36 @@ def ghz_minimal_postselection_from_raw(raw_data, eps_target: float = 0.98, max_f
 
 
 # ---------------------------
-# Routine principale (exécution et sauvegarde)
+# Main routine
 # ---------------------------
 def main():
     t0 = time.time()
-    print_header("Simulation — paramètres défendables et présentables")
+    print_header("Simulation — presentable parameters")
     print(f"Seed: {SEED}   Tag: {NOW_TAG}")
 
-    # 1) CHSH
-    print_header("CHSH (Bell) — tests rapides")
+    # CHSH
+    print_header("CHSH (Bell) — quick tests")
     chsh_results = []
     for pa, pb in [(0.5, 0.5), (0.4, 0.6), (0.3, 0.7), (0.35, 0.35)]:
         S, pa_emp, pb_emp, se_S = compute_S(pa, pb, N=100_000)
         chsh_results.append({'pa': pa, 'pb': pb, 'S': S, 'pa_emp': pa_emp, 'pb_emp': pb_emp, 'se_S': se_S})
-        print(f"pa={pa:.2f}, pb={pb:.2f} → |S|={S:.3f}, P(A+)= {pa_emp:.3f}, P(B+)= {pb_emp:.3f}, SE(S)~{se_S:.4f}")
+        print(f"pa={pa:.2f}, pb={pb:.2f} -> |S|={S:.3f}, P(A+)={pa_emp:.3f}, P(B+)={pb_emp:.3f}, SE(S)~{se_S:.4f}")
 
-    # Save CHSH
-    chsh_csv_rows = [[r['pa'], r['pb'], r['S'], r['pa_emp'], r['pb_emp'], r['se_S']] for r in chsh_results]
-    save_csv_rows(['pa', 'pb', 'S', 'pa_emp', 'pb_emp', 'se_S'], chsh_csv_rows,
+    save_csv_rows(['pa', 'pb', 'S', 'pa_emp', 'pb_emp', 'se_S'],
+                  [[r['pa'], r['pb'], r['S'], r['pa_emp'], r['pb_emp'], r['se_S']] for r in chsh_results],
                   os.path.join(RESULTS_DIR, f"chsh_{NOW_TAG}.csv"))
 
-    # 2) Double-slit S2 & S1 (défendables)
-    print_header("Double-slit S2 (Bloch) — paramètres défendables")
+    # Double-slit S2 & S1
+    print_header("Double-slit S2 (Bloch) — presentable parameters")
     s2_params = {'distribution': 'uniform', 'N': 100_000, 'gamma': 3 * np.pi, 'k': 0.8, 'g': 0.4}
     Imax_s2, Imin_s2, V_s2, fr_s2 = simulate_double_slit_s2(**s2_params)
     print(f"S2 (gamma=3π, k=0.8, g=0.4): Imax={Imax_s2:.3f}, Imin={Imin_s2:.3f}, V={V_s2:.3f}, Fringes≈{fr_s2}")
 
-    print_header("Double-slit S1 (Poincaré) — paramètres défendables")
+    print_header("Double-slit S1 (Poincaré) — presentable parameters")
     s1_params = {'distribution': 'uniform', 'N': 100_000, 'gamma': 5 * np.pi, 'k': 0.3, 'noise_sigma': 0.5}
     Imax_s1, Imin_s1, V_s1, fr_s1 = simulate_double_slit_s1(**s1_params)
     print(f"S1 (gamma=5π, k=0.3, noise_sigma=0.5): Imax={Imax_s1:.3f}, Imin={Imin_s1:.3f}, V={V_s1:.3f}, Fringes≈{fr_s1}")
 
-    # Save double-slit summary
     ds_rows = [
         ['S2', s2_params['gamma'] / np.pi, s2_params['k'], s2_params['g'], Imax_s2, Imin_s2, V_s2, fr_s2],
         ['S1', s1_params['gamma'] / np.pi, s1_params['k'], s1_params['noise_sigma'], Imax_s1, Imin_s1, V_s1, fr_s1]
@@ -510,31 +478,30 @@ def main():
     save_csv_rows(['model', 'gamma_pi', 'k_or_noise', 'param2', 'Imax', 'Imin', 'V', 'fringes'],
                   ds_rows, os.path.join(RESULTS_DIR, f"double_slit_summary_{NOW_TAG}.csv"))
 
-    # 3) GHZ variant (sampling changes only)
-    print_header("GHZ — exécution (sampling contrôlé, règles inchangées)")
+    # GHZ run
+    print_header("GHZ — execution (sampling controlled, rules unchanged)")
     ghz_params = {
         'model': 'S2',
-        'alpha': 10.0,       # concentration Beta raisonnable
+        'alpha': 10.0,
         'beta': 10.0,
         'sigma_common': 0.002,
         'sigma_delta': 0.0005,
         'N': 120_000
     }
     M_no_post, pavg_no_post, eff_no_post, raw_no_post, counts_summary = simulate_ghz_variant(**ghz_params)
-    print(f"GHZ (no post) — M={M_no_post:.3f}, Pavg={pavg_no_post:.3f}, eff_avg={eff_no_post:.3f}")
+    print(f"GHZ (no post) -> M={M_no_post:.3f}, Pavg={pavg_no_post:.3f}, eff_avg={eff_no_post:.3f}")
     print(f"P(+,+,+)={counts_summary['p_ppp']:.5f}, P(-,-,-)={counts_summary['p_mmm']:.5f}")
 
-    # 4) Minimal post-selection (pratique pour calibrage)
-    print_header("GHZ — post-sélection minimale (analyse seulement)")
-    # eps_target et max_fraction choisis pour rester raisonnables et permettre ~0.3 eff si disponible
+    # Post-selection minimal analysis
+    print_header("GHZ — minimal post-selection (analysis only)")
     eps_target = 0.98
     max_fraction = 0.33
     post_res = ghz_minimal_postselection_from_raw(raw_no_post, eps_target=eps_target, max_fraction=max_fraction)
-    print("Post-selection : fractions par réglage:", {k: round(v, 4) for k, v in post_res['fractions'].items()})
+    print("Post-selection : fractions per setting:", {k: round(v, 4) for k, v in post_res['fractions'].items()})
     print("Conditioned E per setting:", {k: round(v, 4) for k, v in post_res['E_cond'].items()})
     print(f"M_postselected = {post_res['M_post']:.4f}, overall_efficiency = {post_res['overall_efficiency']:.4f}")
 
-    # Save GHZ results & raw counts to JSON (compact)
+    # Save summary
     summary = {
         'tag': NOW_TAG,
         'seed': int(SEED),
@@ -552,7 +519,6 @@ def main():
     }
     save_json(summary, os.path.join(RESULTS_DIR, f"summary_{NOW_TAG}.json"))
 
-    # Also save a lightweight CSV for GHZ key numbers
     ghz_csv = [[ghz_params['alpha'], ghz_params['sigma_common'], ghz_params['sigma_delta'], ghz_params['N'],
                 M_no_post, pavg_no_post, eff_no_post, counts_summary['p_ppp'], counts_summary['p_mmm'],
                 post_res['M_post'], post_res['overall_efficiency']]]
@@ -560,10 +526,10 @@ def main():
                    'M_post', 'post_eff'], ghz_csv, os.path.join(RESULTS_DIR, f"ghz_summary_{NOW_TAG}.csv"))
 
     t1 = time.time()
-    print_header("FIN")
-    print(f"Durée totale: {t1 - t0:.1f}s")
-    print("Fichiers sauvegardés dans :", os.path.abspath(RESULTS_DIR))
-    print("Résumé JSON :", os.path.join(RESULTS_DIR, f"summary_{NOW_TAG}.json"))
+    print_header("END")
+    print(f"Total duration: {t1 - t0:.1f}s")
+    print("Files saved in :", os.path.abspath(RESULTS_DIR))
+    print("Summary JSON :", os.path.join(RESULTS_DIR, f"summary_{NOW_TAG}.json"))
     print("=" * 60)
 
 
